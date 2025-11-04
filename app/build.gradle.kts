@@ -15,17 +15,14 @@ android {
         applicationId = "com.xiaopeng.xposed.instrument.compass.ribbon"
         minSdk = libs.versions.sdkMin.get().toInt()
         targetSdk = libs.versions.sdkTarget.get().toInt()
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = (System.getenv("APP_VERSION_CODE") ?: project.findProperty("APP_VERSION_CODE"))?.toString()?.toInt()
+        versionName = project.findProperty("APP_VERSION_NAME")?.toString()
         multiDexEnabled = false
         base.archivesName = "XPluginInstrumentCompassRibbon-$versionName-$versionCode-" + SimpleDateFormat("yyyyMMdd").format(Date())
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-    kotlinOptions {
-        jvmTarget = "11"
     }
     buildFeatures {
         aidl = true
@@ -76,6 +73,12 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), file("proguard-rules.pro"), file("proguard-log.pro"))
             isShrinkResources = true
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
     }
 }
 
