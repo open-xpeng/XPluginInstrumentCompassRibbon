@@ -82,14 +82,9 @@ android {
 dependencies {
     implementation(libs.common.joor)
 
-    debugImplementation(libs.androidx.core.ktx)
-    debugImplementation(libs.androidx.appcompat)
-    debugImplementation(libs.androidx.constraint)
-
     compileOnly(libs.androidx.core.ktx)
     compileOnly(libs.androidx.appcompat)
     compileOnly(libs.androidx.constraint)
     compileOnly(libs.common.xposed)
     compileOnly(libs.common.framework)
-    compileOnly(libs.common.xpeng) { artifact { type = "aar" } }
 }
