@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">方位指示器</string>
+    <string name="xposed_description">在车的仪表盘中显示一个显示当前方向轮盘</string>
+    <array name="xposed_scope">
+        <item>com.xiaopeng.instrument</item>
+        <item>com.xiaopeng.montecarlo</item>
+    </array>
+</resources>
