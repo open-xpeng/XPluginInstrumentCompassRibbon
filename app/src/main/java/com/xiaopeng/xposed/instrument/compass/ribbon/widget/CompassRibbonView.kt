@@ -1,20 +1,28 @@
 package com.xiaopeng.xposed.instrument.compass.ribbon.widget
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 
 class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0) : View(context, attrs, defStyleAttr) {
 
     // 角度相关
     private var displayAngle: Float = 0f
+    private var previousAngle: Float = 0f
 
     // 字体和颜色配置
     private var textSizeInPx: Float = 0f  // 字体大小（px单位）
     private var textColor: Int = 0xFFFFFFFF.toInt()  // 默认白色
+
+    // 动画相关
+    private var textAlpha: Float = 1f
+    private var fadeAnimator: ValueAnimator? = null
+    private val fadeAnimationDuration = 300L  // 300ms
 
     // 绘制画笔
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -63,7 +71,15 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
     fun setValue(angle: Float) {
         val normalizedAngle = convertAngleTo0To360(angle)
         val angleDiff = calculateShortestAngleDiff(displayAngle, normalizedAngle)
-        displayAngle = convertAngleTo0To360(displayAngle + angleDiff)
+        val newDisplayAngle = convertAngleTo0To360(displayAngle + angleDiff)
+        
+        // 检查是否需要触发动画（方向文字是否改变）
+        if (shouldTriggerFadeAnimation(displayAngle, newDisplayAngle)) {
+            triggerFadeAnimation()
+        }
+        
+        previousAngle = displayAngle
+        displayAngle = newDisplayAngle
         invalidate()
     }
 
@@ -103,7 +119,9 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
      */
     private fun updateTextPaint() {
         textPaint.textSize = textSizeInPx
-        textPaint.color = textColor
+        val alpha = (textAlpha * 255).toInt().coerceIn(0, 255)
+        val baseColor = textColor and 0x00FFFFFF  // 移除原alpha值
+        textPaint.color = (alpha shl 24) or baseColor
     }
 
     /**
@@ -320,19 +338,61 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
         return textX in 0..width
     }
 
+    // ==================== 动画相关 ====================
+
+    /**
+     * 检查是否需要触发淡入淡出动画
+     * 当中心位置的文字内容改变时触发动画
+     */
+    private fun shouldTriggerFadeAnimation(oldAngle: Float, newAngle: Float): Boolean {
+        val oldText = getDirectionText(oldAngle)
+        val newText = getDirectionText(newAngle)
+        return oldText != newText
+    }
+
+    /**
+     * 触发淡入淡出动画
+     */
+    private fun triggerFadeAnimation() {
+        // 取消之前的动画
+        fadeAnimator?.cancel()
+
+        // 创建淡出-淡入动画
+        fadeAnimator = ValueAnimator.ofFloat(1f, 0f, 1f).apply {
+            duration = fadeAnimationDuration
+            interpolator = AccelerateDecelerateInterpolator()
+            
+            addUpdateListener { animator ->
+                textAlpha = animator.animatedValue as Float
+                updateTextPaint()
+                invalidate()
+            }
+            
+            start()
+        }
+    }
+
     /**
      * 获取角度对应的方向文字
+     * 当角度在标准方位±10度内时显示中文方位，否则按间隔显示角度数字
      */
     private fun getDirectionText(angle: Float): String? {
         val normalizedAngle = convertAngleTo0To360(angle)
+        val roundedAngle = kotlin.math.round(normalizedAngle).toInt()
 
+        // 检查是否在标准方位±10度以内
         for ((keyAngle, directionText) in directionMap) {
             val keyNormalized = convertAngleTo0To360(keyAngle)
             val angleDiff = kotlin.math.abs(calculateShortestAngleDiff(normalizedAngle, keyNormalized))
 
-            if (angleDiff < 1f) {
+            if (angleDiff <= 10f) {
                 return directionText
             }
+        }
+
+        // 不在标准方位附近，每15度显示一次角度值
+        if (roundedAngle % 15 == 0) {
+            return "${roundedAngle}°"
         }
 
         return null
