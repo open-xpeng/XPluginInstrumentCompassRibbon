@@ -13,6 +13,7 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
 
     // 角度相关
     private var displayAngle: Float = 0f
+    private var targetAngle: Float = 0f
     private var previousAngle: Float = 0f
 
     // 字体和颜色配置
@@ -22,7 +23,9 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
     // 动画相关
     private var textAlpha: Float = 1f
     private var fadeAnimator: ValueAnimator? = null
+    private var scrollAnimator: ValueAnimator? = null
     private val fadeAnimationDuration = 300L  // 300ms
+    private val scrollAnimationDuration = 100L  // 100ms 滚动动画时长
 
     // 绘制画笔
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -60,7 +63,7 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
     )
     private val dotRadius = 1f
     private val dotAngleStep = 9f
-    private val visibleRange = 200f
+    private val visibleRange = 90f  // 减小可见范围，最多显示3个方位
 
     // ==================== 公共接口 ====================
 
@@ -70,17 +73,15 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
      */
     fun setValue(angle: Float) {
         val normalizedAngle = convertAngleTo0To360(angle)
-        val angleDiff = calculateShortestAngleDiff(displayAngle, normalizedAngle)
-        val newDisplayAngle = convertAngleTo0To360(displayAngle + angleDiff)
+        targetAngle = normalizedAngle
         
-        // 检查是否需要触发动画（方向文字是否改变）
-        if (shouldTriggerFadeAnimation(displayAngle, newDisplayAngle)) {
+        // 检查是否需要触发文字淡入淡出动画
+        if (shouldTriggerFadeAnimation(displayAngle, targetAngle)) {
             triggerFadeAnimation()
         }
         
-        previousAngle = displayAngle
-        displayAngle = newDisplayAngle
-        invalidate()
+        // 启动平滑滚动动画
+        startScrollAnimation(targetAngle)
     }
 
     /**
@@ -177,24 +178,21 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
     }
 
     /**
-     * 绘制方向文字
+     * 绘制方向文字 - 只显示中心位置的文字
      */
     private fun drawDirectionTexts(canvas: Canvas, centerX: Float, viewTop: Float) {
         val textBaseY = calculateTextBaseY(viewTop)
-        val drawnPositions = mutableSetOf<Pair<Int, String>>()
-        val (startAngle, endAngle) = getVisibleAngleRange()
-
-        var angleIndex = startAngle.toInt()
-        while (angleIndex <= endAngle.toInt()) {
-            val normalizedAngle = convertAngleTo0To360(angleIndex.toFloat())
-            drawDirectionTextIfNeeded(canvas, normalizedAngle, centerX, textBaseY, drawnPositions)
-            angleIndex++
-        }
+        
+        // 只绘制当前显示角度对应的文字
+        val directionText = getDirectionText(displayAngle)
+        canvas.drawText(directionText, centerX, textBaseY, textPaint)
     }
 
     /**
      * 绘制单个方向文字（如果需要）
+     * @deprecated 已改为只显示中心文字，此方法不再使用
      */
+    @Deprecated("已改为只显示中心文字")
     private fun drawDirectionTextIfNeeded(canvas: Canvas, angle: Float, centerX: Float, textBaseY: Float, drawnPositions: MutableSet<Pair<Int, String>>) {
         val directionText = getDirectionText(angle)
                             ?: return
@@ -373,10 +371,42 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
     }
 
     /**
-     * 获取角度对应的方向文字
-     * 当角度在标准方位±10度内时显示中文方位，否则按间隔显示角度数字
+     * 启动平滑滚动动画
      */
-    private fun getDirectionText(angle: Float): String? {
+    private fun startScrollAnimation(target: Float) {
+        // 取消之前的滚动动画
+        scrollAnimator?.cancel()
+
+        val startAngle = displayAngle
+        val angleDiff = calculateShortestAngleDiff(startAngle, target)
+        val endAngle = startAngle + angleDiff
+
+        // 如果角度差异很小，直接设置
+        if (kotlin.math.abs(angleDiff) < 0.5f) {
+            displayAngle = target
+            invalidate()
+            return
+        }
+
+        // 创建平滑滚动动画
+        scrollAnimator = ValueAnimator.ofFloat(startAngle, endAngle).apply {
+            duration = scrollAnimationDuration
+            interpolator = AccelerateDecelerateInterpolator()
+            
+            addUpdateListener { animator ->
+                displayAngle = convertAngleTo0To360(animator.animatedValue as Float)
+                invalidate()
+            }
+            
+            start()
+        }
+    }
+
+    /**
+     * 获取角度对应的方向文字
+     * 当角度在标准方位±10度内时显示中文方位，否则显示角度数字
+     */
+    private fun getDirectionText(angle: Float): String {
         val normalizedAngle = convertAngleTo0To360(angle)
         val roundedAngle = kotlin.math.round(normalizedAngle).toInt()
 
@@ -390,11 +420,7 @@ class CompassRibbonView @JvmOverloads constructor(context: Context, attrs: Attri
             }
         }
 
-        // 不在标准方位附近，每15度显示一次角度值
-        if (roundedAngle % 15 == 0) {
-            return "${roundedAngle}°"
-        }
-
-        return null
+        // 不在标准方位附近，直接显示当前角度
+        return "${roundedAngle}°"
     }
 }

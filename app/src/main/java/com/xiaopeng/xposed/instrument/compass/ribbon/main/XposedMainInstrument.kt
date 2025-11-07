@@ -38,6 +38,7 @@ class XposedMainInstrument : IXposedHookLoadPackage {
 
     private val mCompassRibbonViewId: Int = View.generateViewId()
     private val mMapStatusChangedLiveData: MutableLiveData<Float> = MutableLiveData()
+    private val mMainHandler: android.os.Handler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
 
     override fun handleLoadPackage(loadPackageParam: XC_LoadPackage.LoadPackageParam) {
         XposedHelpers.findAndHookMethod("com.xiaopeng.instrument.viewmodel.ControlViewModel", loadPackageParam.classLoader, "onNaviStart", mHookMethodControlViewModelOnNaviStart)
@@ -89,11 +90,16 @@ class XposedMainInstrument : IXposedHookLoadPackage {
 
         private val mOnMiniMapStatusChanged: IXposedCallback = object : IXposedCallback.Stub() {
             override fun onMapStatusChanged(mapAngle: Float, carDir: Float, drawMode: Int) {
-                when (drawMode) {
-                    0    -> mMapStatusChangedLiveData.postValue(carDir)
-                    1    -> mMapStatusChangedLiveData.postValue(mapAngle)
-                    2    -> mMapStatusChangedLiveData.postValue(mapAngle)
-                    else -> mMapStatusChangedLiveData.postValue(carDir)
+                val value = when (drawMode) {
+                    0    -> carDir
+                    1    -> mapAngle
+                    2    -> mapAngle
+                    else -> carDir
+                }
+                // 使用 setValue 而不是 postValue，避免数据丢失和延迟
+                // AIDL 回调在 Binder 线程，需要 post 到主线程
+                mMainHandler.post {
+                    mMapStatusChangedLiveData.value = value
                 }
             }
         }
